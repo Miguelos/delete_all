@@ -45,6 +45,7 @@ function delete_all_content_submit() {
   $count = 0;
   while($data = db_fetch_object($result)) {
     node_delete($data->nid);
+    db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%d%%'", $data->nid);
     $count++;
   }
 
