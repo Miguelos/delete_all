@@ -84,6 +84,9 @@ function delete_all_users_submit() {
     $count++;
   }
 
+  // Delete the URL aliases
+  db_query("DELETE FROM {url_alias} WHERE src LIKE 'user/%%'");
+
   db_query("UPDATE {sequences} SET id = 1 WHERE name = 'users_uid'");
 
   drupal_set_message(t('All users have been deleted. Number of users deleted: !count.', array('!count' => $count)));
