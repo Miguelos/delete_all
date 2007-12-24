@@ -45,14 +45,17 @@ function delete_all_content_submit() {
   $count = 0;
   while($data = db_fetch_object($result)) {
     node_delete($data->nid);
-    db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%d%%'", $data->nid);
     $count++;
   }
 
+  // Delete the URL aliases
+  db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%%'");
+
+  // Reset the sequences
   db_query("UPDATE {sequences} SET id = 1 WHERE name = 'node_nid'");
   db_query("UPDATE {sequences} SET id = 1 WHERE name = 'comment_cid'");
 
-  drupal_set_message(t('All nodes and comments have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
+  drupal_set_message(t('All nodes, comments and URL aliases have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
 
   drupal_goto('admin');
 }
