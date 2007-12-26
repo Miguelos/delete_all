@@ -62,12 +62,18 @@ function delete_all_content() {
       '#theme' => 'delete_all_checkboxes',
     ),
   );
-  $form['method'] = array(
-    '#type' => 'select',
+  $form['method-fieldset'] = array(
+    '#type' => 'fieldset',
     '#title' => t('Method'),
-    '#options' => array('normal' => t('Normal'), 'quick' => t('Quick')),
-    '#default_value' => 'normal',
-    '#description' => t('Normal node delete calls node_delete() on every node in the database.  If you have only a few hundred nodes, this can take a very long time.  Use the quick node delete method to get around this problem.  This method deletes directly from the database, skipping the extra php processing.  The downside is that it can miss related tables that are normally handled by module hook_delete\'s.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    'method' => array(
+      '#type' => 'radios',
+      '#title' => t('Method'),
+      '#options' => array('normal' => t('Normal'), 'quick' => t('Quick')),
+      '#default_value' => 'normal',
+      '#description' => t('Normal node delete calls node_delete() on every node in the database.  If you have only a few hundred nodes, this can take a very long time.  Use the quick node delete method to get around this problem.  This method deletes directly from the database, skipping the extra php processing.  The downside is that it can miss related tables that are normally handled by module hook_delete\'s.'),
+    ),
   );
   $form['confirm'] = array(
     '#type' => 'checkbox',
@@ -172,9 +178,12 @@ function _delete_all_normal($all, $types) {
 function _delete_all_quick($types) {
   $deleted = 0;
   foreach ($types as $type) {
+    // keep this alive
+    set_time_limit(240);
+
     // determine how many items will be deleted
     $count = db_result(db_query("SELECT COUNT(*) FROM {node} WHERE type = '%s'", $type));
-    if ($count) {
+    if ($count) { // should always be positive
       /**
        * build a list of tables that need to be deleted from
        *
@@ -184,7 +193,7 @@ function _delete_all_quick($types) {
 
       $nid_vid = array('nid', 'vid');
       $nid = array('nid');
-      $tables = array('node_revisions' => $nid_vid, $comments => $nid);
+      $tables = array('node_revisions' => $nid_vid, 'comments' => $nid);
       $tables[_content_tablename($type, CONTENT_DB_STORAGE_PER_CONTENT_TYPE)] = $nid_vid;
       $content = content_types($type);
       if (count($content->fields)) {
@@ -194,18 +203,36 @@ function _delete_all_quick($types) {
         }
       }
 
-      // find all other related modules that might be related
-      // @TODO: inspect the database and look for nid fields
-      if (module_exists('og')) {
-        $tables['og'] = $nid;
-        $tables['og_uid'] = $nid;
-        $tables['og_ancestry'] = $nid;
+      // find all other tables that might be related
+      switch ($GLOBALS['db_type']) {
+        case 'mysql':
+        case 'mysqli':
+          $result_tables = db_query("SHOW TABLES");
+          while ($data = db_fetch_array($result_tables)) {
+            $table = array_pop($data);
+            if (isset($tables[$table]) || substr($table, 0, 8) == 'content_') {
+              continue;
+            }
+            $result_cols = db_query("SHOW COLUMNS FROM %s", $table);
+            $cols = array();
+            while ($data = db_fetch_array($result_cols)) {
+              $cols[$data['Field']] = $data;
+            }
+            if (isset($cols['nid'])) {
+              $tables[$table] = isset($cols['vid']) ? $nid_vid : $nid;
+            }
+          }
+          break;
+
+        case 'pgsql':
+          // @TODO: inspect the database and look for nid fields
+          break;
       }
 
       // delete from all of the content tables in one sql statement
       $sql = array('delete' => array(), 'from' => array(), 'where' => array());
       $index = 0;
-      foreach (array_unique($tables) as $table => $cols) {
+      foreach ($tables as $table => $cols) {
         $table = '{'. $table .'}';
         $sql['cols'][] = "t$index.*";
 
@@ -219,7 +246,8 @@ function _delete_all_quick($types) {
         $sql['join'][] = " LEFT JOIN $table t$index ON ". implode(' AND ', $on);
         $index ++;
       }
-      db_query("DELETE n.*, ". implode(', ', $sql['cols']) ." FROM {node} n ". implode(' ', $sql['join']) ." WHERE n.type = '%s'", $type);
+      $delete_sql = "DELETE n.*, ". implode(', ', $sql['cols']) ." FROM {node} n ". implode(' ', $sql['join']);
+      db_query($delete_sql ." WHERE n.type = '%s'", $type);
 
       $deleted += $count;
     }
