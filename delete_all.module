@@ -25,46 +25,209 @@ function delete_all_menu($maycache) {
 }
 
 function delete_all_content() {
-  $form['action'] = array(
-    '#type'  => 'hidden',
-    '#value' => 'content',
+  drupal_add_js(drupal_get_path('module', 'delete_all') .'/delete_all.js');
+  $form = array();
+  $form['all'] = array(
+    '#type' => 'checkbox',
+    '#default_value' => TRUE,
+    '#title' => t('Delete All Content'),
+    '#description' => t('Select to delete all content'),
+    '#attributes' => array('class' => 'delete-all'),
   );
-  return confirm_form(
-    $form,
-    t('Are you sure you want to delete all content?'),
-    'admin',
-    '',
-    t('Delete'),
-    t('Cancel'),
-    'delete_all_content');
-}
 
-function delete_all_content_submit() {
-  $result = db_query('SELECT nid FROM {node}');
-
-  $count = 0;
-  while($data = db_fetch_object($result)) {
-    node_delete($data->nid);
-    $count++;
+  // count how many nodes we have of each type
+  $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
+  $count = array();
+  while ($data = db_fetch_object($result)) {
+    $count[$data->type] = $data->num;
   }
 
-  // Delete the URL aliases
-  db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%%'");
+  // add the types to the form
+  $types = array();
+  foreach (node_get_types() as $type => $info) {
+    if ($count[$type] > 0) {
+      $types[$type] = $info->name .' ('. $count[$type]. ')';
+    }
+  }
+  asort($types);
+  $form['type-fieldset'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Types'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    'types' => array(
+      '#type' => 'checkboxes',
+      '#options' => $types,
+      '#description' => t('Select the types of content to delete'),
+      '#theme' => 'delete_all_checkboxes',
+    ),
+  );
+  $form['method'] = array(
+    '#type' => 'select',
+    '#title' => t('Method'),
+    '#options' => array('normal' => t('Normal'), 'quick' => t('Quick')),
+    '#default_value' => 'normal',
+    '#description' => t('Normal node delete calls node_delete() on every node in the database.  If you have only a few hundred nodes, this can take a very long time.  Use the quick node delete method to get around this problem.  This method deletes directly from the database, skipping the extra php processing.  The downside is that it can miss related tables that are normally handled by module hook_delete\'s.'),
+  );
+  $form['confirm'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Delete Confirmation'),
+    '#description' => t('Please check this box to confirm that you understand you are deleting node content.  This should only be done in a development environment.'),
+    '#required' => TRUE,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete'),
+  );
+  $form['#submit'] = array('delete_all_content_submit' => array());
+  return $form;
+}
 
-  // Reset the sequences
-  db_query("UPDATE {sequences} SET id = 1 WHERE name = 'node_nid'");
-  db_query("UPDATE {sequences} SET id = 1 WHERE name = 'comment_cid'");
+function theme_delete_all_checkboxes($form) {
+  $total = 0;
+  foreach ($form as $element_id => $element) {
+    if ($element_id[0] != '#') {
+      $total ++;
+    }
+  }
+  $total = (int) (($total % 3) ? (($total + 2) / 3) : ($total / 3));
+  $pos = 0;
+  $rows = array();
+  foreach ($form as $element_id => $element) {
+    if ($element_id[0] != '#') {
+      $pos ++;
+      $row = $pos % $total;
+      $col = $pos / $total;
+      if (!isset($rows[$row])) {
+        $rows[$row] = array();
+      }
+      $rows[$row][$col] = drupal_render($element);
+    }
+  }
+  return theme('table', array(), $rows);
+}
 
-  drupal_set_message(t('All nodes, comments and URL aliases have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
+function delete_all_content_submit($form_id, &$form) {
+  $types = array();
+  if (!$form['all']) {
+    foreach ($form['types'] as $type => $checked) {
+      if ($checked) {
+        $types[] = $type;
+      }
+    }
+  }
+  switch ($form['method']) {
+    case 'normal':
+      $count = _delete_all_normal($form['all'], $types);
+      break;
+
+    case 'quick':
+      // the quick method doesn't support an all option,
+      // so just get all the content types and delete all of those
+      if ($form['all']) {
+        $result = db_query("SELECT DISTINCT type FROM {node}");
+        while ($data = db_fetch_object($result)) {
+          $types[] = $type;
+        }
+      }
+      $count = _delete_all_quick($types);
+      break;
+  }
+
+  if ($form['all']) {
+    // Delete the URL aliases
+    db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%%'");
+
+    // Reset the sequences
+    db_query("UPDATE {sequences} SET id = 1 WHERE name = 'node_nid'");
+    db_query("UPDATE {sequences} SET id = 1 WHERE name = 'comment_cid'");
+
+    drupal_set_message(t('All nodes, comments and URL aliases have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
+  }
+  else {
+    drupal_set_message(t('Nodes and comments of type @type have been deleted. Number of nodes deleted: !count.', array('!count' => $count, '@type' => implode(', ', $types))));
+  }
 
   drupal_goto('admin');
 }
 
+function _delete_all_normal($all, $types) {
+  if ($form['all']) {
+    $result = db_query('SELECT nid FROM {node}'. $where);
+  }
+  else {
+    $placeholders = implode(',', array_fill(0, count($types), "'%s'"));
+    $result = db_query('SELECT nid FROM {node} WHERE type IN ('. $placeholders .')', $types);
+  }
+
+  $deleted = 0;
+  while ($data = db_fetch_object($result)) {
+    set_time_limit(30);
+    node_delete($data->nid);
+    $deleted ++;
+  }
+  return $deleted;
+}
+
+function _delete_all_quick($types) {
+  $deleted = 0;
+  foreach ($types as $type) {
+    // determine how many items will be deleted
+    $count = db_result(db_query("SELECT COUNT(*) FROM {node} WHERE type = '%s'", $type));
+    if ($count) {
+      /**
+       * build a list of tables that need to be deleted from
+       *
+       * The tables array is of the format table_name => array('col1', 'col2', ...)
+       * where "col1, col2" are using "nid, vid", but could simply be "nid".
+       */
+
+      $nid_vid = array('nid', 'vid');
+      $nid = array('nid');
+      $tables = array('node_revisions' => $nid_vid, $comments => $nid);
+      $tables[_content_tablename($type, CONTENT_DB_STORAGE_PER_CONTENT_TYPE)] = $nid_vid;
+      $content = content_types($type);
+      if (count($content->fields)) {
+        foreach ($content->fields as $field) {
+          $field_info = content_database_info($field);
+          $tables[$field_info['table']] = $nid_vid;
+        }
+      }
+
+      // find all other related modules that might be related
+      // @TODO: inspect the database and look for nid fields
+      if (module_exists('og')) {
+        $tables['og'] = $nid;
+        $tables['og_uid'] = $nid;
+        $tables['og_ancestry'] = $nid;
+      }
+
+      // delete from all of the content tables in one sql statement
+      $sql = array('delete' => array(), 'from' => array(), 'where' => array());
+      $index = 0;
+      foreach (array_unique($tables) as $table => $cols) {
+        $table = '{'. $table .'}';
+        $sql['cols'][] = "t$index.*";
+
+        // build the ON clause
+        $on = array();
+        foreach ($cols as $col) {
+          $on[] = "t$index.$col = n.$col";
+        }
+
+        // now that we have the ON clause, build the join clause
+        $sql['join'][] = " LEFT JOIN $table t$index ON ". implode(' AND ', $on);
+        $index ++;
+      }
+      db_query("DELETE n.*, ". implode(', ', $sql['cols']) ." FROM {node} n ". implode(' ', $sql['join']) ." WHERE n.type = '%s'", $type);
+
+      $deleted += $count;
+    }
+  }
+  return $deleted;
+}
+
 function delete_all_users() {
-  $form['action'] = array(
-    '#type'  => 'hidden',
-    '#value' => 'users',
-  );
   return confirm_form(
     $form,
     t('Are you sure you want to delete all users?'),
@@ -75,7 +238,7 @@ function delete_all_users() {
     'delete_all_content');
 }
 
-function delete_all_users_submit() {
+function delete_all_users_submit($form_id, &$form) {
   $result = db_query('SELECT uid FROM {users} WHERE uid > 1');
 
   $count = 0;
@@ -93,3 +256,4 @@ function delete_all_users_submit() {
 
   drupal_goto('admin');
 }
+
