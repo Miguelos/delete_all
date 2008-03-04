@@ -1,4 +1,5 @@
 <?php
+// $Id$
 
 function delete_all_menu($maycache) {
   $items = array();
@@ -46,7 +47,7 @@ function delete_all_content() {
   $types = array();
   foreach (node_get_types() as $type => $info) {
     if ($count[$type] > 0) {
-      $types[$type] = $info->name .' ('. $count[$type]. ')';
+      $types[$type] = $info->name .' ('. $count[$type] .')';
     }
   }
   asort($types);
@@ -272,7 +273,7 @@ function delete_all_users_submit($form_id, &$form) {
   $result = db_query('SELECT uid FROM {users} WHERE uid > 1');
 
   $count = 0;
-  while($data = db_fetch_object($result)) {
+  while ($data = db_fetch_object($result)) {
     user_delete(array(), $data->uid);
     $count++;
   }
