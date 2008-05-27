@@ -10,7 +10,7 @@ function delete_all_menu($maycache) {
     'description'        => t('Delete all nodes and comments on this site. This is useful for development sites, or prior to launching the site. Otherwise it destroys all data on a site.'),
     'callback'           => 'drupal_get_form',
     'callback arguments' => array('delete_all_content'),
-    'access'             => user_access('administer content'),
+    'access'             => user_access('administer nodes'),
     'type'               => MENU_NORMAL_ITEM);
 
   $items[] = array(
