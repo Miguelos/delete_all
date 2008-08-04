@@ -5,25 +5,70 @@ function delete_all_menu() {
   $items = array();
 
   $items['admin/content/delete_content'] = array(
-    'title'               => 'Delete all content',
-    'description'         => 'Delete all nodes and comments on this site. This is useful for development sites, or prior to launching the site. Otherwise it destroys all data on a site.',
-    'page callback'       => 'drupal_get_form',
-    'page arguments'      => array('delete_all_content'),
-    'access arguments'    => array('administer nodes'),
-    'type'                => MENU_NORMAL_ITEM);
+    'title'            => 'Delete all content',
+    'description'      => 'Delete all nodes and comments on this site. This is useful for development sites, or prior to launching the site. Otherwise it destroys all data on a site.',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('delete_all_content'),
+    'access arguments' => array('administer nodes'),
+    'type'             => MENU_NORMAL_ITEM,
+  );
+  
+  $items['admin/content/delete_content/confirm'] = array(
+    'title'            => 'Confirm deletion of all content',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('delete_all_content_confirm'),
+    'access arguments' => array('administer nodes'),
+    'type'             => MENU_CALLBACK,
+  );
 
   $items['admin/content/delete_users'] = array(
-    'title'               => 'Delete all users',
-    'description'         => 'Delete all users on this site. This is useful for development sites, or prior to launching the site. Otherwise it destroys all data on a site.',
-    'page callback'       => 'drupal_get_form',
-    'page arguments'      => array('delete_all_users'),
-    'access arguments'    => array('administer users'),
-    'type'               => MENU_NORMAL_ITEM);
+    'title'            => 'Delete all users',
+    'description'      => 'Delete all users on this site. This is useful for development sites, or prior to launching the site. Otherwise it destroys all data on a site.',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('delete_all_users'),
+    'access arguments' => array('administer users'),
+    'type'             => MENU_NORMAL_ITEM,
+  );
 
   return $items;
 }
 
 function delete_all_content() {
+  // count how many nodes we have of each type
+  $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
+  $count = array();
+  while ($data = db_fetch_object($result)) {
+    $count[$data->type] = $data->num;
+  }
+  
+  // Add the types to the form. If there are no eligible types to delete,
+  // we don't need to render the form.
+  $types = array();
+  foreach (node_get_types() as $type => $info) {
+    if ($count[$type] > 0) {
+      $types[$type] = $info->name .' ('. $count[$type] .')';
+    }
+  }
+  asort($types);
+  
+  if (empty($types)) {
+    $form = array();
+    $form['no_content_types'] = array(
+      '#prefix' => '<p>',
+      '#suffix' => '</p>',
+      '#value' => t('There are no content types with content available to delete. You must <a href="@node-add">create some content</a> in order to delete it.', array('@node-add' => url('node/add'))),
+    );
+    
+    if (module_exists('devel')) {
+      $form['generate_content_suggestion'] = array(
+        '#prefix' => '<p>',
+        '#suffix' => '</p>',
+        '#value' => t('You can generate content quickly at the <a href="@generate-content-page">generate content page</a>.', array('@generate-content-page' => url('admin/generate/content'))),
+      );
+    }
+    return $form;
+  }
+  
   drupal_add_js(drupal_get_path('module', 'delete_all') .'/delete_all.js');
   $form = array();
   $form['all'] = array(
@@ -34,21 +79,6 @@ function delete_all_content() {
     '#attributes' => array('class' => 'delete-all'),
   );
 
-  // count how many nodes we have of each type
-  $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
-  $count = array();
-  while ($data = db_fetch_object($result)) {
-    $count[$data->type] = $data->num;
-  }
-
-  // add the types to the form
-  $types = array();
-  foreach (node_get_types() as $type => $info) {
-    if ($count[$type] > 0) {
-      $types[$type] = $info->name .' ('. $count[$type] .')';
-    }
-  }
-  asort($types);
   $form['type-fieldset'] = array(
     '#type' => 'fieldset',
     '#title' => t('Types'),
@@ -74,17 +104,11 @@ function delete_all_content() {
       '#description' => t('Normal node delete calls node_delete() on every node in the database.  If you have only a few hundred nodes, this can take a very long time.  Use the quick node delete method to get around this problem.  This method deletes directly from the database, skipping the extra php processing.  The downside is that it can miss related tables that are normally handled by module hook_delete\'s.'),
     ),
   );
-  $form['confirm'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Delete Confirmation'),
-    '#description' => t('Please check this box to confirm that you understand you are deleting node content.  This should only be done in a development environment.'),
-    '#required' => TRUE,
-  );
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Delete'),
   );
-  $form['#submit'] = array('delete_all_content_submit');
+  $form['#action'] = url('admin/content/delete_content/confirm');
   return $form;
 }
 
@@ -123,13 +147,62 @@ function theme_delete_all_checkboxes($form) {
   return theme('table', array(), $rows);
 }
 
-function delete_all_content_submit($form, &$form_state) {
+function delete_all_content_confirm() {
+  $results = $_POST;
+  
+  $form = array();
+  $form['method'] = array(
+    '#type' => 'hidden',
+    '#value' => $results['method'],
+  );
+  
+  $form['all'] = array(
+    '#type' => 'hidden',
+    '#value' => $results['all'],
+  );
+  if ($results['all']) {
+    $form['all_warning'] = array(
+      '#prefix' => '<p>',
+      '#suffix' => '<p>',
+      '#value' => t('All content in all content types will be deleted. Be sure to have a backup of any important data!'),
+    );
+  }
+  
+  if (is_array($results['types'])) {
+    foreach($results['types'] as $key_type => $type) {
+      $form['type_' . $key_type] = array(
+        '#type' => 'hidden',
+        '#value' => $type,
+      );
+      $info = node_get_types('type', $type);
+      $form[$type . '_warning'] = array(
+        '#prefix' => '<p>',
+        '#suffix' => '<p>',
+        '#value' => t('All content in the %type content type will be deleted. Be sure to have a backup of any important data!', array('%type' => $info->name)),
+      );
+    }
+  }
+  
+  $keys = array_filter(array_keys($results), "_delete_all_type_keys");
+  
+  foreach ($keys as $key) {
+    $form[$key] = array(
+      '#type' => 'hidden',
+      '#value' => $results[$key],
+    );
+  }
+  
+  return confirm_form($form, t('Are you sure you wish to delete content?'), 'admin/content/delete_content', NULL, t('Delete all content now'), t('Cancel delete of all content'));
+}
+
+function delete_all_content_confirm_submit($form, &$form_state) {
   $types = array();
+  $form_state['values']['types'] = array();
+
   if (!$form_state['values']['all']) {
-    foreach ($form_state['values']['types'] as $type => $checked) {
-      if ($checked) {
-        $types[] = $type;
-      }
+    $keys = array_filter(array_keys($form_state['values']), "_delete_all_type_keys");
+    foreach ($keys as $key) {
+      $types[] = $form_state['values'][$key];
     }
   }
   
@@ -294,3 +367,13 @@ function delete_all_users_submit($form, &$form_state) {
   drupal_goto('admin');
 }
 
+/**
+ * Private callback to determine if a variable starts with 'type_'.
+ * @param $var
+ *   The string to test against.
+ * @return bool
+ *  TRUE if $var begins with 'type_'
+ */
+function _delete_all_type_keys($var) {
+  return (strpos($var, 'type_') === 0 ? TRUE : FALSE);
+}
