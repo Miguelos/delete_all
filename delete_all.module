@@ -1,4 +1,5 @@
 <?php
+// $Id: delete_all.module,v 1.2.2.1 2008/08/04 23:33:02 kbahey Exp $
 
 function delete_all_menu() {
   $items = array();
@@ -36,7 +37,7 @@ function delete_all_content() {
   // count how many nodes we have of each type
   $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
   $count = array();
-  while ($data = db_fetch_object($result)) {
+  foreach ($result as $data) {
     $count[$data->type] = $data->num;
   }
   
@@ -215,7 +216,8 @@ function delete_all_content_confirm_submit($form, &$form_state) {
       // so just get all the content types and delete all of those
       if ($form_state['values']['all']) {
         $result = db_query("SELECT DISTINCT type FROM {node}");
-        while ($data = db_fetch_object($result)) {
+        foreach ($result as $data) {
+          // while ($data = db_fetch_object($result)) {
           $types[] = $type;
         }
       }
@@ -237,19 +239,17 @@ function delete_all_content_confirm_submit($form, &$form_state) {
 }
 
 function _delete_all_normal($all, $types) {
-  if ($all) {
-    $result = db_query('SELECT nid FROM {node}'. $where);
-  }
-  else {
-    $placeholders = implode(',', array_fill(0, count($types), "'%s'"));
-    $result = db_query('SELECT nid FROM {node} WHERE type IN ('. $placeholders .')', $types);
-  }
-
   $deleted = 0;
-  while ($data = db_fetch_object($result)) {
-    set_time_limit(30);
-    node_delete($data->nid);
-    $deleted ++;
+  foreach ($types as $type) {
+    $result = db_query(
+      'SELECT nid FROM {node} WHERE type = :type', 
+      array(':type' => $type)
+    );
+    foreach ($result as $data) {
+      set_time_limit(30);
+      node_delete($data->nid);
+      $deleted ++;
+    }
   }
   return $deleted;
 }

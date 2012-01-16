@@ -39,10 +39,10 @@ function delete_all_drush_delete() {
       // This should be refactored back into delete_all_content
       $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
       $count = array();
-      while ($data = db_fetch_object($result)) {
-	  $count[$data->type] = $data->num;
+      foreach ($result as $record) {
+	  $count[$record->type] = $record->num;
       }
-      foreach (node_get_types() as $type => $info) {
+      foreach (node_type_get_types() as $type => $info) {
 	  print $info->type .' '. ($count[$type] + 0) . "\n";
       }
   }
