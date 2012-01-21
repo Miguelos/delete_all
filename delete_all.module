@@ -76,7 +76,7 @@ function delete_all_content() {
     '#default_value' => TRUE,
     '#title' => t('Delete All Content'),
     '#description' => t('Select to delete all content'),
-    '#attributes' => array('class' => 'delete-all'),
+    '#attributes' => array('class' => array('delete-all')),
   );
 
   $form['type-fieldset'] = array(
