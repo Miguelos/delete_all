@@ -227,7 +227,7 @@ function delete_all_content_confirm_submit($form, &$form_state) {
 
   if ($form_state['values']['all']) {
     // Delete the URL aliases
-    db_query("DELETE FROM {url_alias} WHERE src LIKE 'node/%%'");
+    db_query("DELETE FROM {url_alias} WHERE source LIKE 'node/%%'");
 
     drupal_set_message(t('All nodes, comments and URL aliases have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
   }
