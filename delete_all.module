@@ -156,30 +156,37 @@ function delete_all_content_confirm() {
     '#value' => $results['method'],
   );
   
+  if( !isset($results['all']) ) {
+    $results['all'] = '';
+  }
+  
   $form['all'] = array(
     '#type' => 'hidden',
     '#value' => $results['all'],
   );
-  if ($results['all']) {
-    $form['all_warning'] = array(
-      '#prefix' => '<p>',
-      '#suffix' => '<p>',
-      '#value' => t('All content in all content types will be deleted. Be sure to have a backup of any important data!'),
-    );
+  
+  if( isset($results['all']) ) {
+    if( !empty($results['all']) ) {
+      $form['all_warning'] = array(
+        '#markup' => '<p>' . t('All content in all content types will be deleted. Be sure to have a backup of any important data!') . '</p>'
+      );
+    }
   }
   
-  if (is_array($results['types'])) {
-    foreach($results['types'] as $key_type => $type) {
-      $form['type_' . $key_type] = array(
-        '#type' => 'hidden',
-        '#value' => $type,
-      );
-      $info = node_type_get_types('type', $type);
-      $form[$type . '_warning'] = array(
-        '#prefix' => '<p>',
-        '#suffix' => '<p>',
-        '#value' => t('All content in the %type content type will be deleted. Be sure to have a backup of any important data!', array('%type' => $info->name)),
-      );
+  if( isset($results['types']) ) {
+    if (is_array($results['types'])) {
+      foreach($results['types'] as $key_type => $type) {
+        $form['type_' . $key_type] = array(
+          '#type' => 'hidden',
+          '#value' => $type,
+        );
+        $info = node_type_get_types('type', $type);
+        $info = $info[$type];
+        
+        $form[$type . '_warning'] = array(
+          '#markup' => '<p>' . t('All content in the %type content type will be deleted. Be sure to have a backup of any important data!', array('%type' => $info->name)) . '</p>'
+        );
+      }
     }
   }
   
