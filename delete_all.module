@@ -88,7 +88,6 @@ function delete_all_content() {
       '#type' => 'checkboxes',
       '#options' => $types,
       '#description' => t('Select the types of content to delete'),
-      '#theme' => 'delete_all_checkboxes',
     ),
   );
   $form['method-fieldset'] = array(
@@ -110,41 +109,6 @@ function delete_all_content() {
   );
   $form['#action'] = url('admin/content/delete_content/confirm');
   return $form;
-}
-
-/**
- * Implementation of hook_theme for Drupal 6 theme registry
- */
-function delete_all_theme() {
-  return array(
-    'theme_delete_all_checkboxes' => array(
-      'arguments' => array('form' => NULL),
-    ),
-  );
-}
-
-function theme_delete_all_checkboxes($form) {
-  $total = 0;
-  foreach ($form as $element_id => $element) {
-    if ($element_id[0] != '#') {
-      $total ++;
-    }
-  }
-  $total = (int) (($total % 3) ? (($total + 2) / 3) : ($total / 3));
-  $pos = 0;
-  $rows = array();
-  foreach ($form as $element_id => $element) {
-    if ($element_id[0] != '#') {
-      $pos ++;
-      $row = $pos % $total;
-      $col = $pos / $total;
-      if (!isset($rows[$row])) {
-        $rows[$row] = array();
-      }
-      $rows[$row][$col] = drupal_render($element);
-    }
-  }
-  return theme('table', array(), $rows);
 }
 
 function delete_all_content_confirm() {
@@ -247,11 +211,20 @@ function delete_all_content_confirm_submit($form, &$form_state) {
 
 function _delete_all_normal($all, $types) {
   $deleted = 0;
-  foreach ($types as $type) {
+  if(is_array($types) && count($types) > 0) {
+    foreach ($types as $type) {
+      $result = db_query(
+        'SELECT nid FROM {node} WHERE type = :type', 
+        array(':type' => $type)
+      );
+    }
+  }
+  else {
     $result = db_query(
-      'SELECT nid FROM {node} WHERE type = :type', 
-      array(':type' => $type)
+      'SELECT nid FROM {node}'
     );
+  }
+  if($result) {
     foreach ($result as $data) {
       set_time_limit(30);
       node_delete($data->nid);
