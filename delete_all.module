@@ -1,5 +1,16 @@
 <?php
-// $Id: delete_all.module,v 1.2.2.1 2008/08/04 23:33:02 kbahey Exp $
+/**
+ * @var DELETE_ALL_MAX_EXECUTION
+ *
+ * Total seconds to allow the delete script to run
+ */
+define('DELETE_ALL_MAX_EXECUTION', 600);
+
+
+/**
+ * @file
+ * Delete all 7.x module
+ */
 
 function delete_all_menu() {
   $items = array();
@@ -289,20 +300,17 @@ function _delete_all_quick($types) {
       }
 
       // @todo: update all node related nid references
-
       // delete from all of the content tables in one sql statement
       $sql = array('delete' => array(), 'from' => array(), 'where' => array());
       $index = 0;
       foreach ($tables as $table => $cols) {
         $table = '{'. $table .'}';
         $sql['cols'][] = "t$index.*";
-
         // build the ON clause
         $on = array();
         foreach ($cols as $col) {
           $on[] = "t$index.$col = n.$col";
         }
-
         // now that we have the ON clause, build the join clause
         $sql['join'][] = " LEFT JOIN $table t$index ON ". implode(' AND ', $on);
         $index ++;
@@ -317,32 +325,28 @@ function _delete_all_quick($types) {
 }
 
 function delete_all_users() {
+  $form = array();
   return confirm_form(
     $form,
-    t('Are you sure you want to delete all users?'),
+    t('Are you sure you want to delete all users (uid > 1)?'),
     'admin',
-    '',
+    t('This will delete all users except for User 1 (the administrative user). This action cannot be undone'),
     t('Delete'),
     t('Cancel'),
     'delete_all_content');
 }
 
 function delete_all_users_submit($form, &$form_state) {
+  ini_set('max_execution_time', DELETE_ALL_MAX_EXECUTION);
   $result = db_query('SELECT uid FROM {users} WHERE uid > 1');
-
   $count = 0;
-  while ($data = db_fetch_object($result)) {
-    user_delete(array(), $data->uid);
+  foreach ($result as $data) {
+    user_delete($data->uid);
     $count++;
   }
-
   // Delete the URL aliases
-  db_query("DELETE FROM {url_alias} WHERE src LIKE 'user/%%'");
-
-  db_query("UPDATE {sequences} SET id = 1 WHERE name = 'users_uid'");
-
+  db_query("DELETE FROM {url_alias} WHERE source LIKE 'user/%%'");
   drupal_set_message(t('All users have been deleted. Number of users deleted: !count.', array('!count' => $count)));
-
   drupal_goto('admin');
 }
 
