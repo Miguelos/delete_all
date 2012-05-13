@@ -338,16 +338,41 @@ function delete_all_users() {
 
 function delete_all_users_submit($form, &$form_state) {
   ini_set('max_execution_time', DELETE_ALL_MAX_EXECUTION);
-  $result = db_query('SELECT uid FROM {users} WHERE uid > 1');
-  $count = 0;
-  foreach ($result as $data) {
-    user_delete($data->uid);
-    $count++;
-  }
-  // Delete the URL aliases
-  db_query("DELETE FROM {url_alias} WHERE source LIKE 'user/%%'");
+  $count = delete_all_users_delete();
   drupal_set_message(t('All users have been deleted. Number of users deleted: !count.', array('!count' => $count)));
   drupal_goto('admin');
+}
+
+function delete_all_users_delete($roles = NULL) {
+  $count = 0;
+  if(!$roles) {
+    $result = db_query('SELECT uid FROM {users} WHERE uid > 1');
+    foreach ($result as $data) {
+      user_delete($data->uid);
+      $count++;
+    }
+    // Delete the URL aliases
+    db_query("DELETE FROM {url_alias} WHERE source LIKE 'user/%%'");
+  }
+  else {
+    if(is_array($roles)) {
+      $result = array();
+      foreach($roles as $role) {
+        $rid = db_select('role','r')->fields('r',array('rid'))->condition('name',$role,'=')->execute()->fetchField();
+        $result = array_merge($result, db_select('users_roles','ur')->fields('ur',array('uid'))->condition('rid',$rid,'=')->execute()->fetchCol('uid'));
+      }
+    }
+    else {
+      $rid = db_select('role','r')->fields('r',array('rid'))->condition('name',$roles,'=')->execute()->fetchField();
+      $result = db_select('users_roles','ur')->fields('ur',array('uid'))->condition('rid',$rid,'=')->execute()->fetchCol('uid');
+    }
+    foreach ($result as $data) {
+      user_delete($data);
+      $count++;
+    }
+    // @TODO Delete individual aliases
+  }
+  return $count;
 }
 
 /**
