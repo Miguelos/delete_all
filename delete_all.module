@@ -23,7 +23,7 @@ function delete_all_menu() {
     'access arguments' => array('administer nodes'),
     'type'             => MENU_NORMAL_ITEM,
   );
-  
+
   $items['admin/content/delete_content/confirm'] = array(
     'title'            => 'Confirm deletion of all content',
     'page callback'    => 'drupal_get_form',
@@ -51,7 +51,7 @@ function delete_all_content() {
   foreach ($result as $data) {
     $count[$data->type] = $data->num;
   }
-  
+
   // Add the types to the form. If there are no eligible types to delete,
   // we don't need to render the form.
   $types = array();
@@ -61,7 +61,7 @@ function delete_all_content() {
     }
   }
   asort($types);
-  
+
   if (empty($types)) {
     $form = array();
     $form['no_content_types'] = array(
@@ -69,7 +69,7 @@ function delete_all_content() {
       '#suffix' => '</p>',
       '#value' => t('There are no content types with content available to delete. You must <a href="@node-add">create some content</a> in order to delete it.', array('@node-add' => url('node/add'))),
     );
-    
+
     if (module_exists('devel')) {
       $form['generate_content_suggestion'] = array(
         '#prefix' => '<p>',
@@ -79,7 +79,7 @@ function delete_all_content() {
     }
     return $form;
   }
-  
+
   drupal_add_js(drupal_get_path('module', 'delete_all') .'/delete_all.js');
   $form = array();
   $form['all'] = array(
@@ -88,6 +88,14 @@ function delete_all_content() {
     '#title' => t('Delete All Content'),
     '#description' => t('Select to delete all content'),
     '#attributes' => array('class' => array('delete-all')),
+  );
+
+  $form['reset'] = array(
+    '#type' => 'checkbox',
+    '#default_value' => FALSE,
+    '#title' => t('Reset node count'),
+    '#description' => t('Select to reset the node count'),
+    '#attributes' => array('class' => array('delete-reset')),
   );
 
   $form['type-fieldset'] = array(
@@ -124,30 +132,52 @@ function delete_all_content() {
 
 function delete_all_content_confirm() {
   $results = $_POST;
-  
+
   $form = array();
   $form['method'] = array(
     '#type' => 'hidden',
     '#value' => $results['method'],
   );
-  
+
   if( !isset($results['all']) ) {
     $results['all'] = '';
   }
-  
+
+  if (!isset($results['reset']) ) {
+    $results['reset'] = '';
+  }
+
   $form['all'] = array(
     '#type' => 'hidden',
     '#value' => $results['all'],
   );
-  
+
   if( isset($results['all']) ) {
     if( !empty($results['all']) ) {
+      // Only carry reset value through if delete all nodes is set
+      $form['reset'] = array(
+        '#type' => 'hidden',
+        '#value' => $results['reset'],
+      );
+
       $form['all_warning'] = array(
         '#markup' => '<p>' . t('All content in all content types will be deleted. Be sure to have a backup of any important data!') . '</p>'
       );
     }
+    if (!empty($results['reset']) ) {
+      if (empty($results['all']) ) {
+        $form['all_reset'] = array(
+          '#markup' => '<p>' . t('Sorry, we can\'t reset the counters because you are not deleting all nodes.') . '</p>'
+        );
+      }
+      else {
+        $form['all_reset'] = array(
+          '#markup' => '<p>' . t('Node, revision and comment counts will be reset.') . '</p>'
+        );
+      }
+    }
   }
-  
+
   if( isset($results['types']) ) {
     if (is_array($results['types'])) {
       foreach($results['types'] as $key_type => $type) {
@@ -157,23 +187,23 @@ function delete_all_content_confirm() {
         );
         $info = node_type_get_types('type', $type);
         $info = $info[$type];
-        
+
         $form[$type . '_warning'] = array(
           '#markup' => '<p>' . t('All content in the %type content type will be deleted. Be sure to have a backup of any important data!', array('%type' => $info->name)) . '</p>'
         );
       }
     }
   }
-  
+
   $keys = array_filter(array_keys($results), "_delete_all_type_keys");
-  
+
   foreach ($keys as $key) {
     $form[$key] = array(
       '#type' => 'hidden',
       '#value' => $results[$key],
     );
   }
-  
+
   return confirm_form($form, t('Are you sure you wish to delete content?'), 'admin/content/delete_content', NULL, t('Delete all content now'), t('Cancel delete of all content'));
 }
 
@@ -187,7 +217,7 @@ function delete_all_content_confirm_submit($form, &$form_state) {
       $types[] = $form_state['values'][$key];
     }
   }
-  
+
   switch ($form_state['values']['method']) {
     case 'normal':
       $count = _delete_all_normal($form_state['values']['all'], $types);
@@ -212,6 +242,18 @@ function delete_all_content_confirm_submit($form, &$form_state) {
     db_query("DELETE FROM {url_alias} WHERE source LIKE 'node/%%'");
 
     drupal_set_message(t('All nodes, comments and URL aliases have been deleted. Number of nodes deleted: !count.', array('!count' => $count)));
+
+    if ($form_state['values']['reset']) {
+      db_query("ALTER TABLE node AUTO_INCREMENT=1");
+      db_query("ALTER TABLE node_revision AUTO_INCREMENT=1");
+      if (module_exists('comment')) {
+        db_query("ALTER TABLE comment AUTO_INCREMENT=1");
+        drupal_set_message(t('All node, revision and comment counts have been reset.'));
+      }
+      else {
+        drupal_set_message(t('All node and revision counts have been reset.'));
+      }
+    }
   }
   else {
     drupal_set_message(t('Nodes and comments of type @type have been deleted. Number of nodes deleted: !count.', array('!count' => $count, '@type' => implode(', ', $types))));
@@ -225,7 +267,7 @@ function _delete_all_normal($all, $types) {
   if(is_array($types) && count($types) > 0) {
     foreach ($types as $type) {
       $result = db_query(
-        'SELECT nid FROM {node} WHERE type = :type', 
+        'SELECT nid FROM {node} WHERE type = :type',
         array(':type' => $type)
       );
     }
