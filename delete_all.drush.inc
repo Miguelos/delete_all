@@ -34,7 +34,7 @@ function delete_all_drush_command() {
 function delete_all_drush_help($section) {
   switch ($section) {
     case 'drush:delete-all':
-	return dt("Delete all nodes, nodes of a specific content type or users.");
+    return dt("Delete all nodes, nodes of a specific content type or users.");
   }
 }
 
@@ -54,7 +54,7 @@ function delete_all_drush_delete() {
       }
       else {
         $role = $types[1];
-        if(strpos($role,',')) {
+        if (strpos($role, ',')) {
           $role = explode(',', $role);
         }
       }
@@ -85,10 +85,10 @@ function delete_all_drush_delete() {
     $result = db_query("SELECT type, COUNT(*) AS num FROM {node} GROUP BY type");
     $count = array();
     foreach ($result as $record) {
-	  $count[$record->type] = $record->num;
+    $count[$record->type] = $record->num;
     }
     foreach (node_type_get_types() as $type => $info) {
-	  drush_print($info->type .' '. ($count[$type] + 0));
+    drush_print($info->type . ' ' . ($count[$type] + 0));
     }
   }
 }
