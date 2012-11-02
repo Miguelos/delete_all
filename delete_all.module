@@ -102,7 +102,7 @@ function delete_all_content() {
     '#type' => 'fieldset',
     '#title' => t('Types'),
     '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
+    '#collapsed' => FALSE,
     'types' => array(
       '#type' => 'checkboxes',
       '#options' => $types,
@@ -113,7 +113,7 @@ function delete_all_content() {
     '#type' => 'fieldset',
     '#title' => t('Method'),
     '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
+    '#collapsed' => FALSE,
     'method' => array(
       '#type' => 'radios',
       '#title' => t('Method'),
@@ -152,7 +152,7 @@ function delete_all_content_confirm() {
     '#value' => $results['all'],
   );
 
-  if (isset($results['all']) ) {
+  if (isset($results['all']) && !isset($results['types'])) {
     if (!empty($results['all']) ) {
       // Only carry reset value through if delete all nodes is set
       $form['reset'] = array(
@@ -209,15 +209,10 @@ function delete_all_content_confirm() {
 
 function delete_all_content_confirm_submit($form, &$form_state) {
   $types = array();
-  $form_state['values']['types'] = array();
-
-  if (!$form_state['values']['all']) {
-    $keys = array_filter(array_keys($form_state['values']), "_delete_all_type_keys");
-    foreach ($keys as $key) {
-      $types[] = $form_state['values'][$key];
-    }
+  $keys = array_filter(array_keys($form_state['values']), "_delete_all_type_keys");
+  foreach ($keys as $key) {
+    $types[] = $form_state['values'][$key];
   }
-
   switch ($form_state['values']['method']) {
     case 'normal':
       $count = _delete_all_normal($form_state['values']['all'], $types);
@@ -237,7 +232,7 @@ function delete_all_content_confirm_submit($form, &$form_state) {
       break;
   }
 
-  if ($form_state['values']['all']) {
+  if (!$types) {
     // Delete the URL aliases
     db_query("DELETE FROM {url_alias} WHERE source LIKE 'node/%%'");
 
