@@ -258,25 +258,28 @@ function delete_all_content_confirm_submit($form, &$form_state) {
 }
 
 function _delete_all_normal($all, $types) {
+  $results = array();
   $deleted = 0;
   if (is_array($types) && count($types) > 0) {
     foreach ($types as $type) {
-      $result = db_query(
+      $results[] = db_query(
         'SELECT nid FROM {node} WHERE type = :type',
         array(':type' => $type)
       );
     }
   }
   else {
-    $result = db_query(
+    $results[] = db_query(
       'SELECT nid FROM {node}'
     );
   }
-  if ($result) {
-    foreach ($result as $data) {
-      set_time_limit(30);
-      node_delete($data->nid);
-      $deleted ++;
+  foreach ($results as $result) {
+    if ($result) {
+      foreach ($result as $data) {
+        set_time_limit(30);
+        node_delete($data->nid);
+        $deleted ++;
+      }
     }
   }
   return $deleted;
