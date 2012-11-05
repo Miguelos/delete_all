@@ -102,7 +102,7 @@ function delete_all_content() {
   $form = array();
   $form['all'] = array(
     '#type' => 'checkbox',
-    '#default_value' => TRUE,
+    '#default_value' => FALSE,
     '#title' => t('Delete All Content'),
     '#description' => t('Select to delete all content'),
     '#attributes' => array('class' => array('delete-all')),
