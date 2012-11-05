@@ -392,7 +392,7 @@ function _delete_all_quick($types, $vocabularies) {
     set_time_limit(240);
 
     // determine how many items will be deleted
-    $count = db_result(db_query("SELECT COUNT(*) FROM {node} WHERE type = '%s'", $type));
+	$count = db_select('node')->condition('type', $type)->countQuery()->execute()->fetchField();
     if ($count) { // should always be positive
       /**
        * build a list of tables that need to be deleted from
