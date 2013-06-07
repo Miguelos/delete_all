@@ -2,4 +2,5 @@
 name = Delete content and users
 description = Allows deletion of all nodes, comments and users on a site. Useful for development or prior to launching a site.
 package = Development
+configure = admin/content/delete_content
 core=7.x
